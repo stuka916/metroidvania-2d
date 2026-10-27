@@ -1,0 +1,19 @@
+{
+  "name": "metroidvania-2d",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "assets:generate": "node scripts/generate-placeholder-assets.mjs"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3",
+    "vite": "^8.3.4"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0"
+  }
+}
