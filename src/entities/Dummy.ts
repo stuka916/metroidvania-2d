@@ -4,6 +4,7 @@ import { Enemy } from './Enemy';
 const TEXTURE_KEY = 'dummy';
 const WIDTH = 28;
 const HEIGHT = 36;
+const BODY_COLOR = 0xab47bc;
 
 const DEFAULT_MAX_HEALTH = 5;
 const PATROL_SPEED = 60;
@@ -20,7 +21,7 @@ export class Dummy extends Enemy {
 
   constructor(scene: Phaser.Scene, x: number, y: number, options: DummyOptions = {}) {
     Dummy.createPlaceholderTexture(scene);
-    super(scene, x, y, TEXTURE_KEY, { maxHealth: options.maxHealth ?? DEFAULT_MAX_HEALTH });
+    super(scene, x, y, TEXTURE_KEY, { maxHealth: options.maxHealth ?? DEFAULT_MAX_HEALTH, particleColor: BODY_COLOR });
     this.patrolRange = options.patrolRange ?? 0;
   }
 
@@ -28,7 +29,7 @@ export class Dummy extends Enemy {
     if (scene.textures.exists(TEXTURE_KEY)) return;
 
     const g = scene.make.graphics({ x: 0, y: 0 }, false);
-    g.fillStyle(0xab47bc);
+    g.fillStyle(BODY_COLOR);
     g.fillRect(0, 0, WIDTH, HEIGHT);
     g.fillStyle(0x000000);
     g.fillRect(6, 10, 4, 4);

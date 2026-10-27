@@ -11,6 +11,8 @@ const HEALTH_BAR_HEIGHT = 4;
 export interface EnemyConfig {
   maxHealth: number;
   contactDamage?: number;
+  // Color de los trozos que suelta al ser destruido
+  particleColor: number;
 }
 
 // Base común de los enemigos: vida, daño recibido, barra de vida, muerte y reaparición.
@@ -20,6 +22,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   // Daño que recibe el jugador al tocarlo
   readonly contactDamage: number;
+  readonly particleColor: number;
 
   protected readonly maxHealth: number;
   protected readonly spawnX: number;
@@ -40,6 +43,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.maxHealth = config.maxHealth;
     this.health = config.maxHealth;
     this.contactDamage = config.contactDamage ?? 1;
+    this.particleColor = config.particleColor;
     this.spawnX = x;
     this.spawnY = y;
 

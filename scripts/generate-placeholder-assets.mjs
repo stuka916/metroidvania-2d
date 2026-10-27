@@ -1,10 +1,11 @@
 // Genera recursos provisionales para el prototipo (sin dependencias, solo Node):
-//   - public/assets/images/tileset.png     → 4 baldosas de 32x32
-//   - public/assets/tilemaps/level1.json   → mapa en formato Tiled JSON (ábrelo y edítalo con Tiled)
-//   - public/assets/audio/*.wav            → efectos de sonido estéreo sintetizados
+//   - public/assets/images/tileset.png        → 4 baldosas de 32x32
+//   - public/assets/tilemaps/level1.json      → mapas en formato Tiled JSON (ábrelos y edítalos con Tiled)
+//   - public/assets/tilemaps/level2.json
+//   - public/assets/audio/*.wav               → efectos de sonido estéreo sintetizados
 //
-// Uso: npm run assets:generate            (no sobrescribe el mapa si ya existe)
-//      npm run assets:generate -- --force (regenera también el mapa)
+// Uso: npm run assets:generate            (no sobrescribe los mapas que ya existen)
+//      npm run assets:generate -- --force (regenera también los mapas)
 
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
@@ -122,57 +123,42 @@ function generateTileset() {
   return { width, count };
 }
 
-// ───────────────────────────── Mapa (Tiled JSON) ─────────────────────────────
+// ───────────────────────────── Mapas (Tiled JSON) ─────────────────────────────
 
-const MAP_WIDTH = 50;
 const MAP_HEIGHT = 20;
+const FLOOR_ROW = 18;
+const FLOOR_Y = FLOOR_ROW * TILE;
 
-function generateMap(tileset) {
-  const data = new Array(MAP_WIDTH * MAP_HEIGHT).fill(0);
-  const fill = (x1, x2, y1, y2, tile) => {
-    for (let y = y1; y <= y2; y++) for (let x = x1; x <= x2; x++) data[y * MAP_WIDTH + x] = tile;
-  };
+// Altura de cada entidad, para colocar su punto de aparición justo sobre el suelo
+const HEIGHTS = { player: 40, dummy: 36, shooter: 32, lever: 24 };
 
-  fill(0, MAP_WIDTH - 1, 18, 18, T.GRASS); // suelo
-  fill(0, MAP_WIDTH - 1, 19, 19, T.DIRT);
-  fill(12, 17, 15, 15, T.WOOD); // plataforma A
-  fill(24, 28, 11, 11, T.WOOD); // plataforma B
-  fill(31, 32, 6, 17, T.STONE); // pilar para wall slide / wall jump
-  fill(36, 42, 13, 13, T.WOOD); // plataforma C (patrulla)
-  fill(44, 48, 9, 9, T.WOOD); // plataforma D
-
-  // Punto (x, y) sobre la superficie de la fila `tileRow` para una entidad de altura `height`
-  const standOn = (pixelX, tileRow, height) => ({ x: pixelX, y: tileRow * TILE - height / 2 });
-
-  const spawns = [
-    { name: 'player', type: 'player', ...standOn(112, 18, 40) },
-    { name: 'dummy-floor', type: 'dummy', ...standOn(320, 18, 36) },
-    {
-      name: 'dummy-patrol',
-      type: 'dummy',
-      ...standOn(39.5 * TILE, 13, 36),
-      properties: [{ name: 'patrolRange', type: 'float', value: 80 }],
-    },
-    { name: 'shooter-pillar', type: 'shooter', ...standOn(32 * TILE, 6, 32) },
-  ];
-
-  const objects = spawns.map((spawn, i) => ({
-    id: i + 1,
-    name: spawn.name,
-    type: spawn.type,
-    x: spawn.x,
-    y: spawn.y,
-    width: 0,
-    height: 0,
-    point: true,
-    rotation: 0,
-    visible: true,
-    ...(spawn.properties ? { properties: spawn.properties } : {}),
+function tiledProperties(properties) {
+  return Object.entries(properties).map(([name, value]) => ({
+    name,
+    type: typeof value === 'number' ? 'float' : typeof value === 'boolean' ? 'bool' : 'string',
+    value,
   }));
+}
 
-  const map = {
+// Objeto punto (spawns, enemigos, palancas): (x, y) es el centro de la entidad
+function point(type, name, x, surfaceY, height, properties) {
+  return { type, name, x, y: surfaceY - height / 2, width: 0, height: 0, point: true, properties };
+}
+
+// Objeto rectángulo (puertas, barreras): en Tiled (x, y) es la esquina superior izquierda
+function rect(type, name, x, y, width, height, properties) {
+  return { type, name, x, y, width, height, properties };
+}
+
+function buildMap({ width, tiles, objects, properties }) {
+  const data = new Array(width * MAP_HEIGHT).fill(0);
+  for (const [x1, x2, y1, y2, tile] of tiles) {
+    for (let y = y1; y <= y2; y++) for (let x = x1; x <= x2; x++) data[y * width + x] = tile;
+  }
+
+  return {
     compressionlevel: -1,
-    width: MAP_WIDTH,
+    width,
     height: MAP_HEIGHT,
     infinite: false,
     orientation: 'orthogonal',
@@ -184,19 +170,9 @@ function generateMap(tileset) {
     tileheight: TILE,
     nextlayerid: 3,
     nextobjectid: objects.length + 1,
+    properties: tiledProperties(properties),
     layers: [
-      {
-        id: 1,
-        name: 'ground',
-        type: 'tilelayer',
-        width: MAP_WIDTH,
-        height: MAP_HEIGHT,
-        x: 0,
-        y: 0,
-        opacity: 1,
-        visible: true,
-        data,
-      },
+      { id: 1, name: 'ground', type: 'tilelayer', width, height: MAP_HEIGHT, x: 0, y: 0, opacity: 1, visible: true, data },
       {
         id: 2,
         name: 'entities',
@@ -206,7 +182,13 @@ function generateMap(tileset) {
         y: 0,
         opacity: 1,
         visible: true,
-        objects,
+        objects: objects.map(({ properties: objectProperties, ...object }, i) => ({
+          id: i + 1,
+          rotation: 0,
+          visible: true,
+          ...object,
+          ...(objectProperties ? { properties: tiledProperties(objectProperties) } : {}),
+        })),
       },
     ],
     tilesets: [
@@ -214,29 +196,95 @@ function generateMap(tileset) {
         firstgid: 1,
         name: 'tileset',
         image: '../images/tileset.png',
-        imagewidth: tileset.width,
+        imagewidth: TILE * Object.keys(T).length,
         imageheight: TILE,
         tilewidth: TILE,
         tileheight: TILE,
-        tilecount: tileset.count,
-        columns: tileset.count,
+        tilecount: Object.keys(T).length,
+        columns: Object.keys(T).length,
         margin: 0,
         spacing: 0,
         // Propiedad personalizada de Tiled: el juego hace colisionables las baldosas con collides = true
-        tiles: Array.from({ length: tileset.count }, (_, id) => ({
-          id,
+        tiles: Object.values(T).map((gid) => ({
+          id: gid - 1,
           properties: [{ name: 'collides', type: 'bool', value: true }],
         })),
       },
     ],
   };
+}
 
-  const mapPath = 'tilemaps/level1.json';
-  if (existsSync(join(ASSETS, mapPath)) && !FORCE) {
-    console.log('  – tilemaps/level1.json ya existe (usa --force para regenerarlo)');
-    return;
+// Zona 1: exterior. Al este hay una barrera que se abre con una palanca y, tras ella, la puerta a la zona 2
+function level1() {
+  const width = 70;
+  const GATE_COL = 54;
+  const GATE_TOP_ROW = 12;
+
+  return buildMap({
+    width,
+    properties: { zoneName: 'Zona 1 · Exterior', backgroundColor: '#1d1d2b' },
+    tiles: [
+      [0, width - 1, FLOOR_ROW, FLOOR_ROW, T.GRASS], // suelo
+      [0, width - 1, 19, 19, T.DIRT],
+      [12, 17, 15, 15, T.WOOD], // plataforma A
+      [24, 28, 11, 11, T.WOOD], // plataforma B
+      [31, 32, 6, 17, T.STONE], // pilar para wall slide / wall jump
+      [36, 42, 13, 13, T.WOOD], // plataforma C (patrulla)
+      [44, 48, 9, 9, T.WOOD], // plataforma D (palanca)
+      [GATE_COL, GATE_COL, 0, GATE_TOP_ROW - 1, T.STONE], // muro sobre la barrera: no se puede saltar por encima
+      [58, 61, 14, 14, T.WOOD], // sección tras la barrera
+    ],
+    objects: [
+      point('spawn', 'start', 112, FLOOR_Y, HEIGHTS.player),
+      point('spawn', 'from-level2', 64 * TILE, FLOOR_Y, HEIGHTS.player),
+      point('dummy', 'dummy-floor', 320, FLOOR_Y, HEIGHTS.dummy),
+      point('dummy', 'dummy-patrol', 39.5 * TILE, 13 * TILE, HEIGHTS.dummy, { patrolRange: 80 }),
+      point('shooter', 'shooter-pillar', 32 * TILE, 6 * TILE, HEIGHTS.shooter),
+      // La palanca abre el objeto cuyo nombre indica "target"
+      point('lever', 'lever-east', 47.5 * TILE, 9 * TILE, HEIGHTS.lever, { target: 'gate-east' }),
+      rect('gate', 'gate-east', GATE_COL * TILE, GATE_TOP_ROW * TILE, TILE, (FLOOR_ROW - GATE_TOP_ROW) * TILE),
+      point('dummy', 'dummy-east', 60 * TILE, 14 * TILE, HEIGHTS.dummy),
+      rect('door', 'door-to-level2', 66 * TILE, FLOOR_Y - 64, 40, 64, { targetMap: 'level2', targetSpawn: 'from-level1' }),
+    ],
+  });
+}
+
+// Zona 2: caverna, con una chimenea entre el pilar y el borde del mapa para practicar wall jumps
+function level2() {
+  const width = 40;
+
+  return buildMap({
+    width,
+    properties: { zoneName: 'Zona 2 · Caverna', backgroundColor: '#120f1f' },
+    tiles: [
+      [0, width - 1, FLOOR_ROW, FLOOR_ROW, T.STONE],
+      [0, width - 1, 19, 19, T.DIRT],
+      [0, width - 1, 0, 0, T.STONE], // techo
+      [8, 12, 15, 15, T.WOOD],
+      [15, 19, 12, 12, T.WOOD],
+      [22, 26, 9, 9, T.WOOD],
+      [35, 35, 6, 17, T.STONE], // chimenea: pilar + borde derecho del mapa
+      [29, 33, 6, 6, T.WOOD],
+    ],
+    objects: [
+      point('spawn', 'from-level1', 4 * TILE, FLOOR_Y, HEIGHTS.player),
+      rect('door', 'door-to-level1', 1 * TILE, FLOOR_Y - 64, 40, 64, { targetMap: 'level1', targetSpawn: 'from-level2' }),
+      point('dummy', 'dummy-cave', 20 * TILE, FLOOR_Y, HEIGHTS.dummy, { patrolRange: 120 }),
+      point('shooter', 'shooter-cave', 24.5 * TILE, 9 * TILE, HEIGHTS.shooter),
+      point('dummy', 'dummy-top', 31.5 * TILE, 6 * TILE, HEIGHTS.dummy),
+    ],
+  });
+}
+
+function generateMaps() {
+  for (const [name, build] of Object.entries({ level1, level2 })) {
+    const mapPath = `tilemaps/${name}.json`;
+    if (existsSync(join(ASSETS, mapPath)) && !FORCE) {
+      console.log(`  – ${mapPath} ya existe (usa --force para regenerarlo)`);
+      continue;
+    }
+    write(mapPath, JSON.stringify(build(), null, 2));
   }
-  write(mapPath, JSON.stringify(map, null, 2));
 }
 
 // ───────────────────────────── Audio (WAV estéreo) ─────────────────────────────
@@ -354,9 +402,34 @@ function generateSounds() {
     const v = (hitOsc(lerp(180, 60, p)) * 0.6 + hitNoise() * 0.3 * (1 - p * 4)) * (1 - p);
     return [v, v];
   }));
+
+  // Palanca: dos "clics" cuadrados (grave y agudo)
+  const switchOsc = oscillator('square');
+  write('audio/switch.wav', synth(0.16, (t, p) => {
+    const v = switchOsc(p < 0.4 ? 520 : 880) * 0.18 * (1 - (p % 0.5) * 2);
+    return [v, v];
+  }));
+
+  // Barrera abriéndose: retumbar grave con el ruido algo distinto en cada canal
+  const gateL = lowPassNoise(31, 0.05);
+  const gateR = lowPassNoise(37, 0.05);
+  const gateOsc = oscillator('triangle');
+  write('audio/gate.wav', synth(0.7, (t, p) => {
+    const env = Math.sin(Math.PI * Math.min(1, p * 1.4)) * 0.8;
+    const tone = gateOsc(lerp(70, 45, p)) * 0.3;
+    return [(gateL() * 3 + tone) * env, (gateR() * 3 + tone) * env];
+  }));
+
+  // Puerta / cambio de zona: barrido grave ascendente con ruido suave
+  const doorOsc = oscillator('sine');
+  const doorNoise = lowPassNoise(43, 0.1);
+  write('audio/door.wav', synth(0.4, (t, p) => {
+    const v = (doorOsc(lerp(110, 330, p)) * 0.35 + doorNoise() * 0.6) * Math.sin(Math.PI * p);
+    return [v, v];
+  }));
 }
 
 console.log('Generando recursos provisionales en public/assets:');
-const tileset = generateTileset();
-generateMap(tileset);
+generateTileset();
+generateMaps();
 generateSounds();

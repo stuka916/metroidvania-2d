@@ -42,10 +42,14 @@ const KNOCKBACK_VELOCITY_Y = -260;
 const KNOCKBACK_LOCK_MS = 250;
 const HURT_TINT = 0xff5252;
 
+// Velocidad de caída mínima para que el aterrizaje cuente como "fuerte" (y levante polvo)
+const HARD_LANDING_FALL_SPEED = 250;
+
 // Eventos que emite el Player para que la escena / HUD reaccionen sin que el Player los conozca
 export const PlayerEvents = {
   HEALTH_CHANGED: 'player-health-changed', // (health: number, maxHealth: number)
   JUMPED: 'player-jumped', // (kind: JumpKind)
+  LANDED: 'player-landed',
   DASHED: 'player-dashed',
   ATTACKED: 'player-attacked',
   DAMAGED: 'player-damaged',
@@ -78,6 +82,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private isDead = false;
 
   private jumpsRemaining = MAX_JUMPS;
+  private wasOnGround = false;
+  // Velocidad de caída del último frame en el aire (al aterrizar la velocidad ya vale 0)
+  private fallSpeed = 0;
   // Un solo dash por cada vez que está en el aire; se recarga al tocar el suelo o una pared
   private hasAirDash = true;
   private isDashing = false;
@@ -97,9 +104,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // Objetivos ya golpeados en el ataque actual: cada golpe hace daño una sola vez
   private hitTargets = new Set<Phaser.GameObjects.GameObject>();
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
+  // health: vida inicial (al cambiar de zona se conserva la que tenía; por defecto, la máxima)
+  constructor(scene: Phaser.Scene, x: number, y: number, health = MAX_HEALTH) {
     Player.createPlaceholderTexture(scene);
     super(scene, x, y, TEXTURE_KEY);
+    this.currentHealth = Phaser.Math.Clamp(health, 1, MAX_HEALTH);
 
     // Registrar el sprite en la escena (render + update) y en el motor de físicas
     scene.add.existing(this);
@@ -193,10 +202,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return this.currentHealth;
   }
 
+  // Lado de la pared por la que se está deslizando (-1 izquierda, 1 derecha) o 0 si no se desliza
+  get wallSlideDirection(): -1 | 0 | 1 {
+    return this.isWallSliding ? this.wallDirection : 0;
+  }
+
   // fromX: posición X de quien hace daño, para empujar al jugador en sentido contrario
   takeDamage(amount: number, fromX: number): void {
     const time = this.scene.time.now;
-    if (this.isDead || time < this.invulnerableUntil) return;
+    // !active: congelado por la escena (p. ej. cruzando una puerta)
+    if (this.isDead || !this.active || time < this.invulnerableUntil) return;
 
     this.currentHealth = Math.max(0, this.currentHealth - amount);
     this.emit(PlayerEvents.HEALTH_CHANGED, this.currentHealth, this.maxHealth);
@@ -231,7 +246,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private updateGroundState(): void {
-    if (this.isOnGround() && this.body.velocity.y >= 0) {
+    const onGround = this.isOnGround();
+    if (onGround && !this.wasOnGround && this.fallSpeed >= HARD_LANDING_FALL_SPEED) {
+      this.emit(PlayerEvents.LANDED);
+    }
+    this.fallSpeed = onGround ? 0 : this.body.velocity.y;
+    this.wasOnGround = onGround;
+
+    if (onGround && this.body.velocity.y >= 0) {
       // En el suelo (y no en el frame en que acaba de despegar): se recargan saltos y dash aéreo
       this.jumpsRemaining = MAX_JUMPS;
       this.hasAirDash = true;
@@ -381,6 +403,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   private die(): void {
     this.isDead = true;
+    this.isWallSliding = false;
     if (this.isDashing) this.endDash();
     this.isAttacking = false;
     this.attackHitbox.setVisible(false);

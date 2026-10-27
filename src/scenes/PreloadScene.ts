@@ -1,20 +1,23 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config/constants';
-import { TILEMAP, TILESET, SFX_FILES } from '../config/assets';
+import { MAPS, TILESET, SFX_FILES } from '../config/assets';
+import { SCENES } from '../config/sceneKeys';
 
 const BAR_WIDTH = 300;
 const BAR_HEIGHT = 12;
 
-// Carga todos los recursos una sola vez; al reiniciar MainScene ya están en caché
+// Carga todos los recursos una sola vez; al reiniciar o cambiar de zona ya están en caché
 export class PreloadScene extends Phaser.Scene {
   constructor() {
-    super({ key: 'PreloadScene' });
+    super({ key: SCENES.PRELOAD });
   }
 
   preload(): void {
     this.createProgressBar();
 
-    this.load.tilemapTiledJSON(TILEMAP.key, TILEMAP.url);
+    for (const [key, url] of Object.entries(MAPS)) {
+      this.load.tilemapTiledJSON(key, url);
+    }
     this.load.image(TILESET.key, TILESET.url);
 
     for (const [key, url] of Object.entries(SFX_FILES)) {
@@ -23,7 +26,7 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.scene.start('MainScene');
+    this.scene.start(SCENES.MAIN_MENU);
   }
 
   private createProgressBar(): void {

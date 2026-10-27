@@ -4,6 +4,7 @@ import { Enemy } from './Enemy';
 const TEXTURE_KEY = 'shooter';
 const WIDTH = 28;
 const HEIGHT = 32;
+const BODY_COLOR = 0x26a69a;
 
 const DEFAULT_MAX_HEALTH = 3;
 // Distancia a la que detecta al jugador
@@ -36,7 +37,7 @@ export class Shooter extends Enemy {
 
   constructor(scene: Phaser.Scene, x: number, y: number, options: ShooterOptions) {
     Shooter.createPlaceholderTexture(scene);
-    super(scene, x, y, TEXTURE_KEY, { maxHealth: options.maxHealth ?? DEFAULT_MAX_HEALTH });
+    super(scene, x, y, TEXTURE_KEY, { maxHealth: options.maxHealth ?? DEFAULT_MAX_HEALTH, particleColor: BODY_COLOR });
     this.target = options.target;
   }
 
@@ -44,7 +45,7 @@ export class Shooter extends Enemy {
     if (scene.textures.exists(TEXTURE_KEY)) return;
 
     const g = scene.make.graphics({ x: 0, y: 0 }, false);
-    g.fillStyle(0x26a69a);
+    g.fillStyle(BODY_COLOR);
     g.fillRect(0, 4, WIDTH, HEIGHT - 4);
     g.fillStyle(0x00796b);
     g.fillRect(4, 0, WIDTH - 8, 6);
